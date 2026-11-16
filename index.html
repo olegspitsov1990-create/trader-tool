@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trader Tool</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+<header>
+  <div class="brand">Trader Tool</div>
+  <nav>
+    <button class="tab active" data-tab="signals">Signale</button>
+    <button class="tab" data-tab="history">Verlauf</button>
+    <button class="tab" data-tab="stats">Statistik</button>
+  </nav>
+  <div id="status" class="status"></div>
+</header>
+
+<main>
+  <section class="filters">
+    <select id="f-group"><option value="">Krypto + Aktien</option><option value="crypto">Krypto</option><option value="stocks">Aktien</option></select>
+    <select id="f-dir"><option value="">Kauf + Verkauf</option><option value="long">Kauf / ↑</option><option value="short">Verkauf / ↓</option></select>
+    <input id="f-search" type="search" placeholder="Symbol oder Name …">
+  </section>
+
+  <section id="tab-signals" class="panel"></section>
+  <section id="tab-history" class="panel hidden"></section>
+  <section id="tab-stats" class="panel hidden"></section>
+
+  <p class="note">„Ausbruch ↑/↓“: historischer Anteil, in dem der Kurs nach dem Setup zuerst die obere bzw. untere Marke
+    (±1,5 ATR, innerhalb von 10 Kerzen) erreicht hat. „Basis“: derselbe Wert über alle Kerzen ohne Setup.
+    Statistische Auswertung, keine Anlageberatung.</p>
+</main>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-head"><div id="modal-title"></div><button id="modal-close" aria-label="Schließen">✕</button></div>
+    <div id="chart"></div>
+    <div class="legend"><span class="l20">EMA 20</span><span class="l50">EMA 50</span><span class="l200">EMA 200</span></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

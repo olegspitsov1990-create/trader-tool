@@ -1,0 +1,35 @@
+# ------------------------------------------------------------
+# Trader Tool – Konfiguration
+# Änderungen hier werden beim nächsten Lauf automatisch übernommen.
+# ------------------------------------------------------------
+
+# Adresse deiner Website (nach Einrichtung von GitHub Pages eintragen,
+# z. B. https://DEIN-NAME.github.io/trader-tool/). Wird in der E-Mail verlinkt.
+site_url: ""
+
+groups:
+  crypto:
+    market: crypto
+    symbols: [BTC-USD, ETH-USD]
+    names:
+      BTC-USD: Bitcoin
+      ETH-USD: Ethereum
+    timeframes: [1h, 4h, 1d]
+
+  stocks:
+    market: stocks
+    universe: sp500          # Liste wird automatisch von Wikipedia geladen
+    timeframes: [1d]
+
+analysis:
+  breakout_lookback: 20      # Hoch/Tief der letzten N Kerzen für Ausbruch
+  volume_factor: 1.5         # Mindest-Volumen relativ zum 20er-Durchschnitt
+  squeeze_min_bars: 5        # Kerzen im Bollinger-Squeeze, bevor gewarnt wird
+  horizon_bars: 10           # Zeitfenster für "Ausbruch" (in Kerzen)
+  barrier_atr: 1.5           # Ausbruch = Kurs bewegt sich ±1,5 ATR
+
+alerts:
+  min_probability: 0.57      # Mindest-Richtungswahrscheinlichkeit für einen Alarm
+  min_samples: 30            # Mindestanzahl historischer Fälle des Setups
+  cooldown_bars: 5           # gleiches Setup beim gleichen Symbol frühestens nach N Kerzen erneut
+  max_signals_per_mail: 25   # weitere Signale stehen auf der Website
