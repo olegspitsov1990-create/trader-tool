@@ -102,25 +102,39 @@ def send_test(cfg: dict) -> None:
              f"<p>Der E-Mail-Versand funktioniert. ✅</p>" + (f'<p><a href="{html.escape(url)}">Zur Website</a></p>' if url else ""))
 
 
+def _env(name: str, default: str = "") -> str:
+    """Secret lesen und unsichtbare Leerzeichen/Zeilenumbrüche entfernen."""
+    return (os.environ.get(name) or default).strip()
+
+
 def _deliver(subj: str, text: str, body: str) -> None:
+    host, user = _env("SMTP_HOST"), _env("SMTP_USER")
+    password = "".join(_env("SMTP_PASS").split())  # App-Passwörter oft mit Leerzeichen kopiert
+    port = int(_env("SMTP_PORT", "465") or 465)
     msg = EmailMessage()
     msg["Subject"] = subj
-    msg["From"] = os.environ.get("MAIL_FROM") or os.environ["SMTP_USER"]
-    msg["To"] = os.environ["MAIL_TO"]
+    msg["From"] = _env("MAIL_FROM") or user
+    msg["To"] = _env("MAIL_TO")
     msg.set_content(text)
     msg.add_alternative(body, subtype="html")
-    host = os.environ["SMTP_HOST"]
-    port = int(os.environ.get("SMTP_PORT") or 465)
+    log.info("SMTP: Server %s, Port %d, Benutzer %s***, Passwortlänge %d, Empfänger gesetzt: %s",
+             host, port, user[:3], len(password), bool(msg["To"]))
     ctx = ssl.create_default_context()
-    if port == 465:
-        with smtplib.SMTP_SSL(host, port, context=ctx, timeout=60) as s:
-            s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"].replace(" ", ""))
-            s.send_message(msg)
-    else:
-        with smtplib.SMTP(host, port, timeout=60) as s:
-            s.starttls(context=ctx)
-            s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"].replace(" ", ""))
-            s.send_message(msg)
+    try:
+        if port == 465:
+            with smtplib.SMTP_SSL(host, port, context=ctx, timeout=60) as s:
+                s.login(user, password)
+                s.send_message(msg)
+        else:
+            with smtplib.SMTP(host, port, timeout=60) as s:
+                s.starttls(context=ctx)
+                s.login(user, password)
+                s.send_message(msg)
+    except (smtplib.SMTPAuthenticationError, smtplib.SMTPServerDisconnected) as exc:
+        raise SystemExit(
+            f"Anmeldung am Mailserver fehlgeschlagen ({exc}). Bitte prüfen: SMTP_USER = vollständige "
+            "E-Mail-Adresse, SMTP_PASS = App-Passwort (bei Gmail 16 Zeichen, nicht das normale Passwort), "
+            "SMTP_HOST/SMTP_PORT passend zum Anbieter.") from exc
     log.info("E-Mail versendet: %s", subj)
 
 
