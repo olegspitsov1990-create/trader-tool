@@ -92,6 +92,38 @@ def render(signals: list[dict], site_url: str, more: int) -> tuple[str, str]:
     return text, body
 
 
+def send_test(cfg: dict) -> None:
+    """Schickt eine Test-E-Mail, um die SMTP-Einstellungen zu prüfen."""
+    if not os.environ.get("SMTP_HOST"):
+        raise SystemExit("SMTP_HOST fehlt – Secrets in GitHub prüfen.")
+    url = cfg.get("site_url", "")
+    _deliver("✅ Trader Tool – Test-E-Mail",
+             "Der E-Mail-Versand funktioniert.\n" + (f"Website: {url}\n" if url else ""),
+             f"<p>Der E-Mail-Versand funktioniert. ✅</p>" + (f'<p><a href="{html.escape(url)}">Zur Website</a></p>' if url else ""))
+
+
+def _deliver(subj: str, text: str, body: str) -> None:
+    msg = EmailMessage()
+    msg["Subject"] = subj
+    msg["From"] = os.environ.get("MAIL_FROM") or os.environ["SMTP_USER"]
+    msg["To"] = os.environ["MAIL_TO"]
+    msg.set_content(text)
+    msg.add_alternative(body, subtype="html")
+    host = os.environ["SMTP_HOST"]
+    port = int(os.environ.get("SMTP_PORT") or 465)
+    ctx = ssl.create_default_context()
+    if port == 465:
+        with smtplib.SMTP_SSL(host, port, context=ctx, timeout=60) as s:
+            s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"].replace(" ", ""))
+            s.send_message(msg)
+    else:
+        with smtplib.SMTP(host, port, timeout=60) as s:
+            s.starttls(context=ctx)
+            s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"].replace(" ", ""))
+            s.send_message(msg)
+    log.info("E-Mail versendet: %s", subj)
+
+
 def send(signals: list[dict], cfg: dict, root: Path, dry_run: bool = False) -> None:
     if not signals:
         log.info("Keine neuen Signale – keine E-Mail.")
@@ -111,21 +143,4 @@ def send(signals: list[dict], cfg: dict, root: Path, dry_run: bool = False) -> N
         log.info("E-Mail nicht versendet (Testmodus/kein SMTP) – Vorschau in out/. Betreff: %s", subj)
         return
 
-    msg = EmailMessage()
-    msg["Subject"] = subj
-    msg["From"] = os.environ.get("MAIL_FROM") or os.environ["SMTP_USER"]
-    msg["To"] = os.environ["MAIL_TO"]
-    msg.set_content(text)
-    msg.add_alternative(body, subtype="html")
-    port = int(os.environ.get("SMTP_PORT") or 465)
-    ctx = ssl.create_default_context()
-    if port == 465:
-        with smtplib.SMTP_SSL(host, port, context=ctx, timeout=60) as s:
-            s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
-            s.send_message(msg)
-    else:
-        with smtplib.SMTP(host, port, timeout=60) as s:
-            s.starttls(context=ctx)
-            s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
-            s.send_message(msg)
-    log.info("E-Mail versendet: %s", subj)
+    _deliver(subj, text, body)

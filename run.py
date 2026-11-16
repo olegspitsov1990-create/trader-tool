@@ -92,8 +92,13 @@ def main() -> None:
     p = argparse.ArgumentParser(description="Trader Tool – Überwachungslauf")
     p.add_argument("--group", required=True, choices=["crypto", "stocks"])
     p.add_argument("--dry-run", action="store_true", help="keine E-Mail senden, Vorschau in out/")
+    p.add_argument("--test-mail", action="store_true", help="nur eine Test-E-Mail senden")
     a = p.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if a.test_mail:
+        cfg = yaml.safe_load((ROOT / "config" / "config.yaml").read_text(encoding="utf-8"))
+        notify.send_test(cfg)
+        return
     run(a.group, dry_run=a.dry_run)
 
 

@@ -71,7 +71,8 @@ def signals_on_last_bar(d: pd.DataFrame, symbol: str, tf: str, group: str, table
         if direction == "neutral":
             direction = "long" if cond_up >= 0.5 else "short"
         score = cond_up if direction == "long" else 1 - cond_up
-        if score < float(alcfg.get("min_probability", 0.57)):
+        edge = score - (base_up if direction == "long" else 1 - base_up)
+        if score < float(alcfg.get("min_probability", 0.55)) or edge < float(alcfg.get("min_edge", 0.05)):
             continue
         t = d.index[-1]
         out.append({
@@ -83,7 +84,7 @@ def signals_on_last_bar(d: pd.DataFrame, symbol: str, tf: str, group: str, table
             "p_breakout": (st["up"] + st["down"]) / st["n"],
             "p_up": st["up"] / st["n"], "p_down": st["down"] / st["n"],
             "cond_up": cond_up, "score": score, "base_up": base_up,
-            "edge": score - (base_up if direction == "long" else 1 - base_up),
+            "edge": edge,
             "n": st["n"], "trend": row["trend"], "rsi": float(row["rsi"]),
             "vol_ratio": None if pd.isna(row["vol_ratio"]) else float(row["vol_ratio"]),
             "outcome": None, "created": datetime.now(timezone.utc).isoformat(timespec="seconds"),

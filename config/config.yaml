@@ -29,7 +29,8 @@ analysis:
   barrier_atr: 1.5           # Ausbruch = Kurs bewegt sich ±1,5 ATR
 
 alerts:
-  min_probability: 0.57      # Mindest-Richtungswahrscheinlichkeit für einen Alarm
+  min_probability: 0.55      # Mindest-Richtungswahrscheinlichkeit für einen Alarm
+  min_edge: 0.05             # Mindest-Vorteil gegenüber der Basisrate (0.05 = 5 Prozentpunkte)
   min_samples: 30            # Mindestanzahl historischer Fälle des Setups
   cooldown_bars: 5           # gleiches Setup beim gleichen Symbol frühestens nach N Kerzen erneut
   max_signals_per_mail: 25   # weitere Signale stehen auf der Website

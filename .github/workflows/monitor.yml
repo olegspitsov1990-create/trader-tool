@@ -15,6 +15,10 @@ on:
         description: "Testlauf ohne E-Mail"
         type: boolean
         default: false
+      test_mail:
+        description: "Nur Test-E-Mail senden (keine Analyse)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -61,7 +65,9 @@ jobs:
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
         run: |
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "${{ inputs.test_mail }}" = "true" ]; then
+            python run.py --group crypto --test-mail
+          elif [ "${{ inputs.dry_run }}" = "true" ]; then
             python run.py --group ${{ steps.g.outputs.group }} --dry-run
           else
             python run.py --group ${{ steps.g.outputs.group }}

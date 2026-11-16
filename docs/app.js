@@ -85,15 +85,19 @@ function renderStats() {
       html += `<h3>${GROUPS[g]} · ${tf} <span class="name">Basis: Ausbruch ↑ ${pct(b.auf?.cond_up)} im Aufwärtstrend,
         ${pct(b.ab?.cond_up)} im Abwärtstrend</span></h3>
         <table><thead><tr><th>Setup</th><th>Trend</th><th class="num">Fälle</th><th class="num">Ausbruch ↑</th>
-        <th class="num">Ausbruch ↓</th><th class="num">Richtung ↑</th><th class="num">ggü. Basis</th><th class="num">Live-Treffer</th></tr></thead><tbody>`;
+        <th class="num">Ausbruch ↓</th><th class="num">Richtung ↑</th><th class="num">Vorteil ggü. Basis</th><th class="num">Live-Treffer</th></tr></thead><tbody>`;
       const rows = st.setups.filter((r) => r.n > 0).sort((a, b) => a.setup.localeCompare(b.setup) || a.trend.localeCompare(b.trend));
       for (const r of rows) {
         const base = b[r.trend]?.cond_up;
-        const edge = r.cond_up != null && base != null ? r.cond_up - base : null;
+        // Vorteil in Setup-Richtung: bei Verkaufs-Setups zählt "unten" (positiv = besser als Basis)
+        let edge = r.cond_up != null && base != null ? r.cond_up - base : null;
+        let edgeDir = "";
+        if (edge != null && r.direction === "short") edge = -edge;
+        if (edge != null && r.direction === "neutral") { edgeDir = edge >= 0 ? " ↑" : " ↓"; edge = Math.abs(edge); }
         const lv = live[`${tf}|${r.setup}`];
         html += `<tr><td>${esc(r.title)}</td><td>${r.trend}</td><td class="num">${r.n}</td>
           <td class="num">${pct(r.p_up)}</td><td class="num">${pct(r.p_down)}</td><td class="num">${pct(r.cond_up)}</td>
-          <td class="num ${edge > 0 ? "pos" : edge < 0 ? "neg" : ""}">${edge == null ? "–" : (edge > 0 ? "+" : "") + Math.round(edge * 100) + " Pkt."}</td>
+          <td class="num ${edge > 0 ? "pos" : edge < 0 ? "neg" : ""}">${edge == null ? "–" : (edge > 0 ? "+" : "") + Math.round(edge * 100) + " Pkt." + edgeDir}</td>
           <td class="num">${lv ? `${pct(lv.hits / lv.n)} (${lv.n})` : "–"}</td></tr>`;
       }
       html += `</tbody></table>`;
