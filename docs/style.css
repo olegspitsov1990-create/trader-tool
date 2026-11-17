@@ -15,7 +15,7 @@ nav { display: flex; gap: 4px; }
 .tab { border: 0; background: none; color: var(--muted); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; }
 .tab.active { background: var(--bg); color: var(--text); font-weight: 600; }
 .status { margin-left: auto; color: var(--muted); font-size: 12px; }
-main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 40px; }
+main { max-width: 1400px; margin: 0 auto; padding: 16px 20px 40px; }
 .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .filters select, .filters input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
   background: var(--card); color: var(--text); font-size: 14px; }

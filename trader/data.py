@@ -91,6 +91,21 @@ def download(symbols: list[str], timeframe: str, market: str, chunk: int = 100, 
                     result[sym] = df
             except Exception as exc:  # noqa: BLE001
                 log.warning("%s: %s", sym, exc)
+    # Zweiter Versuch für fehlende Symbole (einzeln, ohne Parallelität)
+    missing = [s for s in symbols if s not in result]
+    if missing and len(missing) <= 50:
+        for sym in missing:
+            try:
+                df = yf.download(sym, period=period, interval=interval, auto_adjust=True, threads=False, progress=False)
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = df.columns.get_level_values(0)
+                df = _localize(_normalize(df.copy()), market)
+                if timeframe == "4h":
+                    df = _resample_4h(df)
+                if len(df) > 50:
+                    result[sym] = df
+            except Exception as exc:  # noqa: BLE001
+                log.warning("%s (2. Versuch): %s", sym, exc)
     log.info("%s %s: %d/%d Symbole geladen", market, timeframe, len(result), len(symbols))
     return result
 
