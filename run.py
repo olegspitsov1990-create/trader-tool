@@ -13,7 +13,7 @@ from typing import Callable
 
 import yaml
 
-from trader import data, indicators, notify, setups, site, state as st, stats
+from trader import data, indicators, notify, overview, setups, site, state as st, stats
 
 ROOT = Path(__file__).resolve().parent
 log = logging.getLogger("trader")
@@ -28,16 +28,19 @@ def run(group: str, dry_run: bool = False, root: Path = ROOT,
     now = now or datetime.now(timezone.utc)
 
     if gcfg.get("universe") == "sp500":
-        meta = universe() if universe else data.load_sp500(root / "config" / "sp500.csv")
+        meta = universe() if universe else data.load_sp500(root / "state" / "sp500.csv")
         symbols, names = meta["symbol"].tolist(), dict(zip(meta["symbol"], meta["name"]))
+        sectors = dict(zip(meta["symbol"], meta["sector"])) if "sector" in meta else {}
     else:
         symbols, names = list(gcfg["symbols"]), dict(gcfg.get("names") or {})
+        sectors = {}
 
     state_path = root / "state" / f"{group}.json"
     state = st.load(state_path)
     signals = site.load_signals(root, group)
     new_signals: list[dict] = []
     stats_by_tf: dict = {}
+    overview_by_tf: dict = {}
     status: dict = {"group": group, "symbols": len(symbols), "timeframes": {}}
 
     for tf in gcfg["timeframes"]:
@@ -74,15 +77,21 @@ def run(group: str, dry_run: bool = False, root: Path = ROOT,
 
         signals.extend(tf_new)
         new_signals.extend(tf_new)
-        for sym in {s["symbol"] for s in tf_new}:
-            site.write_chart(root, group, sym, tf, prepared[sym], signals)
+        rows = []
+        for sym, d in prepared.items():
+            site.write_chart(root, group, sym, tf, d, signals)
+            try:
+                rows.append(overview.row(d, sym, names.get(sym, sym), sectors.get(sym), table))
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Übersicht %s %s: %s", sym, tf, exc)
+        overview_by_tf[tf] = rows
         last_bar = max(d.index[-1] for d in prepared.values())
         status["timeframes"][tf] = {"symbols": len(prepared), "last_bar": last_bar.isoformat(),
                                     "new_signals": len(tf_new), "resolved": resolved}
         log.info("%s %s: %d Symbole, %d neue Signale, %d Ergebnisse nachgetragen",
                  group, tf, len(prepared), len(tf_new), resolved)
 
-    site.save(root, group, signals, stats_by_tf, status)
+    site.save(root, group, signals, stats_by_tf, status, overview_by_tf)
     st.save(state_path, state)
     notify.send(new_signals, cfg, root, dry_run=dry_run)
     return new_signals

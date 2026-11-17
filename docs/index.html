@@ -11,7 +11,8 @@
 <header>
   <div class="brand">Trader Tool</div>
   <nav>
-    <button class="tab active" data-tab="signals">Signale</button>
+    <button class="tab active" data-tab="overview">Marktübersicht</button>
+    <button class="tab" data-tab="signals">Signale</button>
     <button class="tab" data-tab="history">Verlauf</button>
     <button class="tab" data-tab="stats">Statistik</button>
   </nav>
@@ -19,24 +20,47 @@
 </header>
 
 <main>
-  <section class="filters">
+  <!-- Marktübersicht -->
+  <section id="tab-overview" class="panel">
+    <div class="filters">
+      <select id="o-group"><option value="stocks">Aktien (S&amp;P 500)</option><option value="crypto">Krypto</option></select>
+      <select id="o-tf"></select>
+      <select id="o-sector"><option value="">Alle Sektoren</option></select>
+      <input id="o-search" type="search" placeholder="Symbol oder Name …">
+    </div>
+    <div id="o-chips" class="chips">
+      <button data-q="" class="chip active">Alle</button>
+      <button data-q="setup" class="chip">Mit Setup</button>
+      <button data-q="edge" class="chip">Vorteil ≥ 5 Pkt.</button>
+      <button data-q="squeeze" class="chip">Im Squeeze</button>
+      <button data-q="nearhigh" class="chip">Nahe 20er-Hoch</button>
+      <button data-q="nearlow" class="chip">Nahe 20er-Tief</button>
+      <button data-q="oversold" class="chip">RSI &lt; 30</button>
+      <button data-q="overbought" class="chip">RSI &gt; 70</button>
+    </div>
+    <div id="o-kpis" class="kpis"></div>
+    <div id="o-table"></div>
+  </section>
+
+  <!-- Signale / Verlauf / Statistik -->
+  <section id="sig-filters" class="filters hidden">
     <select id="f-group"><option value="">Krypto + Aktien</option><option value="crypto">Krypto</option><option value="stocks">Aktien</option></select>
     <select id="f-dir"><option value="">Kauf + Verkauf</option><option value="long">Kauf / ↑</option><option value="short">Verkauf / ↓</option></select>
     <input id="f-search" type="search" placeholder="Symbol oder Name …">
   </section>
-
-  <section id="tab-signals" class="panel"></section>
+  <section id="tab-signals" class="panel hidden"></section>
   <section id="tab-history" class="panel hidden"></section>
   <section id="tab-stats" class="panel hidden"></section>
 
-  <p class="note">„Ausbruch ↑/↓“: historischer Anteil, in dem der Kurs nach dem Setup zuerst die obere bzw. untere Marke
-    (±1,5 ATR, innerhalb von 10 Kerzen) erreicht hat. „Basis“: derselbe Wert über alle Kerzen ohne Setup.
-    Statistische Auswertung, keine Anlageberatung.</p>
+  <p class="note">„Richtung ↑“: historischer Anteil, in dem der Kurs nach dem Setup zuerst die obere statt die untere Marke
+    (±1,5 ATR, innerhalb von 10 Kerzen) erreicht hat. „Vorteil“: Abstand zur Basisrate ohne Setup in Prozentpunkten.
+    Abstand Hoch/Tief in ATR (durchschnittliche Kerzen-Schwankung). Statistische Auswertung, keine Anlageberatung.</p>
 </main>
 
 <div id="modal" class="modal hidden">
   <div class="modal-box">
     <div class="modal-head"><div id="modal-title"></div><button id="modal-close" aria-label="Schließen">✕</button></div>
+    <div id="modal-info" class="modal-info"></div>
     <div id="chart"></div>
     <div class="legend"><span class="l20">EMA 20</span><span class="l50">EMA 50</span><span class="l200">EMA 200</span></div>
   </div>

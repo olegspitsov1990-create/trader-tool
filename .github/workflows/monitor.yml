@@ -45,6 +45,15 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      - name: Gespeicherte Daten laden (Zweig "data")
+        run: |
+          if git ls-remote --exit-code --heads origin data >/dev/null; then
+            git fetch -q --depth 1 origin data
+            rm -rf docs/data state
+            git archive FETCH_HEAD | tar -x
+          fi
+          mkdir -p docs/data state
+
       - name: Gruppe bestimmen
         id: g
         run: |
@@ -73,15 +82,28 @@ jobs:
             python run.py --group ${{ steps.g.outputs.group }}
           fi
 
-      - name: Ergebnisse speichern
+      - name: Daten speichern (Zweig "data" wird überschrieben, kein Anwachsen des Repos)
+        env:
+          TOKEN: ${{ github.token }}
         run: |
-          git config user.name "trader-tool-bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A docs/data state config
-          if ! git diff --cached --quiet; then
-            git commit -m "Update ${{ steps.g.outputs.group }} $(date -u +%Y-%m-%dT%H:%MZ)"
-            git pull --rebase origin main
-            git push origin HEAD:main
+          tmp=$(mktemp -d)
+          mkdir -p "$tmp/docs"
+          cp -r docs/data "$tmp/docs/"
+          cp -r state "$tmp/"
+          cd "$tmp"
+          git init -q -b data
+          git add -A
+          git -c user.name="trader-tool-bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "Daten ${{ steps.g.outputs.group }} $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -fq "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" data
+
+      - name: Zeitplan aktiv halten (GitHub pausiert ihn nach 60 Tagen ohne Commit)
+        run: |
+          last=$(git log -1 --format=%ct)
+          if [ $(( $(date +%s) - last )) -gt 4320000 ]; then
+            git -c user.name="trader-tool-bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit --allow-empty -qm "keepalive"
+            git push -q origin HEAD:main
           fi
 
   deploy:
@@ -94,6 +116,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+      - name: Daten einbinden
+        run: |
+          git fetch -q --depth 1 origin data
+          git archive FETCH_HEAD docs/data | tar -x
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

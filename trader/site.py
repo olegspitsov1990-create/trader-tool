@@ -70,7 +70,8 @@ def write_chart(root: Path, group: str, symbol: str, tf: str, d: pd.DataFrame, s
     })
 
 
-def save(root: Path, group: str, signals: list[dict], stats_by_tf: dict, status: dict) -> None:
+def save(root: Path, group: str, signals: list[dict], stats_by_tf: dict, status: dict,
+         overview_by_tf: dict | None = None) -> None:
     out = _dir(root, group)
     signals = sorted(signals, key=lambda s: s["bar_time"], reverse=True)[:KEEP_SIGNALS]
     _dump(out / "signals.json", signals)
@@ -106,7 +107,10 @@ def save(root: Path, group: str, signals: list[dict], stats_by_tf: dict, status:
     _dump(out / "status.json", status)
 
     # Charts ohne zugehöriges Signal entfernen
+    overview_by_tf = overview_by_tf or {}
+    _dump(out / "overview.json", overview_by_tf)
     keep = {chart_file(s["symbol"], s["tf"]) for s in signals}
+    keep |= {chart_file(r["symbol"], tf) for tf, rows in overview_by_tf.items() for r in rows}
     for f in (out / "charts").glob("*.json"):
         if f.name not in keep:
             f.unlink()

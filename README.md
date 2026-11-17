@@ -6,6 +6,10 @@ und schickt Alarme per **E-Mail**. Alle Signale, Charts und Trefferquoten stehen
 Läuft komplett kostenlos auf GitHub.
 
 ## So funktioniert es
+- **Website:** Marktübersicht aller überwachten Symbole (Trend, RSI, Squeeze, Abstand zu Hoch/Tief, aktive Setups,
+  Wahrscheinlichkeit, Chart per Klick), dazu Signale, Verlauf und Statistik.
+- **Datenhaltung:** Kurs-/Chartdaten und der Zustand liegen im Zweig `data`, der bei jedem Lauf überschrieben wird –
+  so wächst das Repository nicht an. Der Zweig `main` enthält nur den Programmcode.
 - **Krypto:** stündlich (Minute 7). Aktien: werktags 21:35 UTC, nach US-Börsenschluss.
 - **Setups:** Ausbruch über Hoch/unter Tief mit Volumen, Bollinger-Squeeze, RSI-Umkehr, EMA-20/50-Kreuz, Engulfing.
 - **Wahrscheinlichkeit:** Für jedes Setup (getrennt nach Auf-/Abwärtstrend über EMA 200) wird über die gesamte Historie

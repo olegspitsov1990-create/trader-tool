@@ -2,3 +2,6 @@ out/
 __pycache__/
 *.pyc
 .env
+# Laufzeitdaten liegen im Zweig "data"
+docs/data/
+state/
