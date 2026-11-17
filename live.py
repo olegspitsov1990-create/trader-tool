@@ -26,7 +26,9 @@ from zoneinfo import ZoneInfo
 import yaml
 
 import run as runner
-from trader import alpaca, data
+from urllib.parse import parse_qs, urlparse
+
+from trader import alpaca, candles, data
 
 ROOT = Path(__file__).resolve().parent
 NY = ZoneInfo("America/New_York")
@@ -51,14 +53,26 @@ def load_env() -> None:
 # ---------------------------------------------------------------- lokale Website
 
 class Handler(SimpleHTTPRequestHandler):
+    def _json(self, obj, status: int = 200) -> None:
+        body = json.dumps(obj).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):  # noqa: N802
-        if self.path.split("?")[0] == "/api/live":
-            body = json.dumps(LIVE).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+        url = urlparse(self.path)
+        if url.path == "/api/live":
+            self._json(LIVE)
+            return
+        if url.path == "/api/candles":
+            q = {k: v[0] for k, v in parse_qs(url.query).items()}
+            try:
+                self._json(candles.get(q.get("group", "stocks"), q["symbol"], q.get("interval", "1d"), q.get("range", "1Y")))
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Chartdaten %s: %s", q.get("symbol"), exc)
+                self._json({"error": str(exc)}, 502)
             return
         super().do_GET()
 

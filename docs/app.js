@@ -281,54 +281,223 @@ function render() { renderOverview(); renderSignals(); renderHistory(); renderSt
 
 /* ---------------- Chart ---------------- */
 
+const RANGE_SEC = { "1D": 86400, "5D": 5 * 86400, "1M": 31 * 86400, "3M": 92 * 86400, "6M": 183 * 86400,
+  "1Y": 366 * 86400, "2Y": 731 * 86400, "5Y": 1827 * 86400 };
+const DEFAULT_INT = { "1D": "5m", "5D": "15m", "1M": "1h", "3M": "1d", "6M": "1d", "YTD": "1d", "1Y": "1d",
+  "2Y": "1w", "5Y": "1w", "MAX": "1M" };
+const INT_MS = { "1m": 6e4, "5m": 3e5, "15m": 9e5, "1h": 36e5, "4h": 144e5, "1d": 864e5, "1w": 6048e5, "1M": 26298e5 };
+const cv = { group: null, symbol: null, signal: null, interval: "1d", range: "1Y", timer: null, req: 0 };
+
+function rangeStart(range, lastSec) {
+  if (range === "MAX") return null;
+  if (range === "YTD") return Date.UTC(new Date().getUTCFullYear(), 0, 1) / 1000;
+  return lastSec - RANGE_SEC[range];
+}
+
+async function binanceDirect(symbol, interval, range) {
+  // ohne PC-Server: Krypto-Kerzen direkt im Browser von Binance
+  const step = INT_MS[interval], now = Date.now();
+  const days = range === "MAX" ? null : range === "YTD" ? (now - Date.UTC(new Date().getUTCFullYear(), 0, 1)) / 864e5 : RANGE_SEC[range] / 86400;
+  let start = days == null ? 15e11 : now - days * 864e5 - 220 * step;
+  start = Math.max(start, now - 5000 * step);
+  const rows = [];
+  for (const base of ["https://data-api.binance.vision", "https://api.binance.com"]) {
+    try {
+      let s = start;
+      rows.length = 0;
+      while (s < now) {
+        const r = await fetch(`${base}/api/v3/klines?symbol=${symbol}&interval=${interval}&startTime=${Math.floor(s)}&limit=1000`);
+        if (!r.ok) throw new Error();
+        const b = await r.json();
+        if (!b.length) break;
+        rows.push(...b);
+        s = b[b.length - 1][0] + 1;
+        if (b.length < 1000) break;
+      }
+      break;
+    } catch { /* nächste Quelle */ }
+  }
+  if (!rows.length) return { error: "Binance nicht erreichbar" };
+  return { source: "Binance", time: rows.map((x) => x[0] / 1000), open: rows.map((x) => +x[1]), high: rows.map((x) => +x[2]),
+    low: rows.map((x) => +x[3]), close: rows.map((x) => +x[4]), volume: rows.map((x) => +x[5]) };
+}
+
+function resample(c, interval) {
+  if (interval === "1d") return c;
+  const out = { source: c.source, time: [], open: [], high: [], low: [], close: [], volume: [] };
+  let key = null;
+  c.time.forEach((t, i) => {
+    const d = new Date(t * 1000);
+    const k = interval === "1M" ? Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000
+      : (Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 1000) - ((d.getUTCDay() + 6) % 7) * 86400;
+    if (k !== key) {
+      key = k;
+      out.time.push(k); out.open.push(c.open[i]); out.high.push(c.high[i]); out.low.push(c.low[i]);
+      out.close.push(c.close[i]); out.volume.push(c.volume?.[i] || 0);
+    } else {
+      const n = out.time.length - 1;
+      out.high[n] = Math.max(out.high[n], c.high[i]); out.low[n] = Math.min(out.low[n], c.low[i]);
+      out.close[n] = c.close[i]; out.volume[n] += c.volume?.[i] || 0;
+    }
+  });
+  return out;
+}
+
+async function fetchCandles(group, symbol, interval, range) {
+  if (live.local) {
+    try {
+      const r = await fetch(`api/candles?group=${group}&symbol=${encodeURIComponent(symbol)}&interval=${interval}&range=${range}`);
+      const j = await r.json();
+      if (r.ok && j.time?.length) return j;
+    } catch { /* Fallback */ }
+  }
+  if (group === "crypto") return binanceDirect(symbol, interval, range);
+  const c = await getJSON(`data/${group}/charts/${chartFile(symbol, "1d")}`, null);
+  if (!c) return { error: "Keine Chartdaten vorhanden." };
+  if (!["1d", "1w", "1M"].includes(interval)) return { error: "Intraday-Charts für Aktien gibt es im Live-Modus auf dem PC (http://localhost:8080)." };
+  c.source = "gespeicherte Tagesdaten";
+  return resample(c, interval);
+}
+
+function sma(values, n) {
+  const out = new Array(values.length).fill(null);
+  let sum = 0;
+  values.forEach((v, i) => { sum += v; if (i >= n) sum -= values[i - n]; if (i >= n - 1) out[i] = sum / n; });
+  return out;
+}
+
+const localShift = (t) => t - new Date(t * 1000).getTimezoneOffset() * 60;  // Achse in deutscher Ortszeit
+
+function fmtBarTime(t, interval) {
+  const d = new Date(t * 1000);
+  if (["1d", "1w", "1M"].includes(interval)) return d.toLocaleDateString("de-DE", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric" });
+  return d.toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" });
+}
+
 async function openChart(group, symbol, tf, signal) {
-  const c = await getJSON(`data/${group}/charts/${chartFile(symbol, tf)}`, null);
-  const row = ((data.overview[group] || {})[tf] || []).find((r) => r.symbol === symbol);
-  const name = signal?.name || row?.name || symbol;
-  $("#modal-title").textContent = `${symbol} · ${name} · ${tf}`;
+  Object.assign(cv, { group, symbol, signal });
+  if (signal || tf) {
+    const t = signal?.tf || tf;
+    cv.interval = t; cv.range = t === "1d" ? "1Y" : t === "4h" ? "3M" : "1M";
+  }
+  const row = ((data.overview[group] || {})[tf || "1d"] || []).find((r) => r.symbol === symbol)
+    || Object.values(data.overview[group] || {}).flat().find((r) => r.symbol === symbol);
+  $("#modal-title").innerHTML = `${esc(symbol)} <span class="name">${esc(signal?.name || row?.name || "")}${row?.sector ? " · " + esc(row.sector) : ""}</span>`;
   const info = [];
   if (row) {
-    info.push(`Kurs <b>${num(row.close)}</b> (<span class="${cls(row.chg)}">${pct1(row.chg)}</span>)`,
-      `Trend <b class="${row.trend === "auf" ? "pos" : "neg"}">${row.trend}</b>`, `RSI <b>${dec(row.rsi, 0)}</b>`,
-      `Squeeze <b>${row.squeeze_len || "–"}</b>`, `→ Hoch <b>${dec(row.dist_hh)}</b> ATR`, `→ Tief <b>${dec(row.dist_ll)}</b> ATR`);
-    for (const s of row.setups) info.push(`<span class="tag ${s.direction}">${esc(s.title)}</span> Richtung ↑ ${pct(s.cond_up)}, Vorteil ${pts(s.edge)} (n=${s.n})`);
+    info.push(`Trend <b class="${row.trend === "auf" ? "pos" : "neg"}">${row.trend}</b>`, `RSI <b>${dec(row.rsi, 0)}</b>`,
+      `Squeeze <b>${row.squeeze_len || "–"}</b>`, `→ 20er-Hoch <b>${dec(row.dist_hh)}</b> ATR`, `→ 20er-Tief <b>${dec(row.dist_ll)}</b> ATR`);
+    for (const s of row.setups) info.push(`<span class="tag ${s.direction}">${esc(s.title)}</span> ${s.direction === "short" ? "↓ " + pct(1 - s.cond_up) : "↑ " + pct(s.cond_up)}, Vorteil ${pts(s.edge)} (n=${s.n})`);
   }
   if (signal) info.push(`Signal: <b>${esc(signal.title)}</b> · Marke ↑ ${num(signal.level_up)} / ↓ ${num(signal.level_down)}`);
   $("#modal-info").innerHTML = info.map((x) => `<span>${x}</span>`).join("");
   $("#modal").classList.remove("hidden");
-  const el = $("#chart");
-  el.innerHTML = "";
-  if (chart) { chart.remove(); chart = null; }
-  if (!c || !window.LightweightCharts) { el.innerHTML = `<div class="empty">Kein Chart verfügbar.</div>`; return; }
-  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
-  chart = LightweightCharts.createChart(el, {
-    autoSize: true,
-    layout: { background: { color: "transparent" }, textColor: dark ? "#9aa3b2" : "#4b5563" },
-    grid: { vertLines: { color: dark ? "#2a303b" : "#eef0f3" }, horzLines: { color: dark ? "#2a303b" : "#eef0f3" } },
-    timeScale: { timeVisible: tf !== "1d" }, localization: { locale: "de-DE" },
-  });
-  const candles = chart.addCandlestickSeries({ upColor: "#16a34a", downColor: "#dc2626", borderVisible: false,
-    wickUpColor: "#16a34a", wickDownColor: "#dc2626" });
-  candles.setData(c.time.map((t, i) => ({ time: t, open: c.open[i], high: c.high[i], low: c.low[i], close: c.close[i] })));
-  for (const [key, color] of [["ema20", "#f59e0b"], ["ema50", "#3b82f6"], ["ema200", "#a855f7"]]) {
-    chart.addLineSeries({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
-      .setData(c.time.map((t, i) => ({ time: t, value: c[key][i] })).filter((p) => p.value != null));
-  }
-  candles.setMarkers((c.markers || []).map((m) => ({ time: m.time, position: m.direction === "long" ? "belowBar" : "aboveBar",
-    color: m.direction === "long" ? "#16a34a" : "#dc2626", shape: m.direction === "long" ? "arrowUp" : "arrowDown", text: m.title }))
-    .sort((a, b) => a.time - b.time));
-  if (signal) {
-    candles.createPriceLine({ price: signal.level_up, color: "#16a34a", lineStyle: 2, title: "Marke ↑" });
-    candles.createPriceLine({ price: signal.level_down, color: "#dc2626", lineStyle: 2, title: "Marke ↓" });
-  } else if (row && row.dist_hh != null) {
-    const atr = row.atr_pct * row.close;
-    candles.createPriceLine({ price: row.close + row.dist_hh * atr, color: "#16a34a", lineStyle: 2, title: "20er-Hoch" });
-    candles.createPriceLine({ price: row.close - row.dist_ll * atr, color: "#dc2626", lineStyle: 2, title: "20er-Tief" });
-  }
-  chart.timeScale().fitContent();
+  history.replaceState(null, "", `#chart=${group}|${encodeURIComponent(symbol)}|${tf || signal?.tf || "1d"}`);
+  await drawChart(true);
 }
 
-function closeChart() { $("#modal").classList.add("hidden"); if (chart) { chart.remove(); chart = null; } }
+async function drawChart(fresh) {
+  document.querySelectorAll("#c-int button").forEach((b) => b.classList.toggle("active", b.dataset.i === cv.interval));
+  document.querySelectorAll("#c-rng button").forEach((b) => b.classList.toggle("active", b.dataset.r === cv.range));
+  const req = ++cv.req;
+  const el = $("#chart");
+  if (fresh) { if (chart) { chart.remove(); chart = null; } el.innerHTML = `<div class="empty">Lade Kerzen …</div>`; }
+  const c = await fetchCandles(cv.group, cv.symbol, cv.interval, cv.range);
+  if (req !== cv.req) return;  // inzwischen andere Auswahl
+  if (!c || c.error || !c.time?.length) {
+    if (chart) { chart.remove(); chart = null; }
+    el.innerHTML = `<div class="empty">${esc(c?.error || "Keine Daten.")}</div>`; $("#c-legend").innerHTML = ""; return;
+  }
+  if (!window.LightweightCharts) { el.innerHTML = `<div class="empty">Chart-Bibliothek nicht geladen (Internet?).</div>`; return; }
+  const intraday = !["1d", "1w", "1M"].includes(cv.interval);
+  const T = c.time.map((t) => (intraday ? localShift(t) : t));
+  const bars = T.map((t, i) => ({ time: t, open: c.open[i], high: c.high[i], low: c.low[i], close: c.close[i] }));
+  const smas = { 20: sma(c.close, 20), 50: sma(c.close, 50), 200: sma(c.close, 200) };
+  const keepRange = !fresh && chart ? chart.timeScale().getVisibleLogicalRange() : null;
+
+  if (fresh || !chart) {
+    el.innerHTML = "";
+    if (chart) chart.remove();
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    chart = LightweightCharts.createChart(el, {
+      autoSize: true,
+      layout: { background: { color: "transparent" }, textColor: dark ? "#9aa3b2" : "#4b5563", fontSize: 11 },
+      grid: { vertLines: { color: dark ? "#232833" : "#f0f2f5" }, horzLines: { color: dark ? "#232833" : "#f0f2f5" } },
+      rightPriceScale: { scaleMargins: { top: 0.06, bottom: 0.22 } },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      timeScale: { timeVisible: intraday, secondsVisible: false, rightOffset: 4 },
+      localization: { locale: "de-DE", priceFormatter: (p) => num(p) },
+    });
+    chart._s = {
+      candles: chart.addCandlestickSeries({ upColor: "#16a34a", downColor: "#dc2626", borderVisible: false,
+        wickUpColor: "#16a34a", wickDownColor: "#dc2626" }),
+      vol: chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false }),
+      s20: chart.addLineSeries({ color: "#a855f7", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }),
+      s50: chart.addLineSeries({ color: "#f59e0b", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }),
+      s200: chart.addLineSeries({ color: "#a16207", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }),
+    };
+    chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+    chart.subscribeCrosshairMove((p) => legend(p && p.time != null ? chart._idx.get(p.time) : null));
+  }
+  const S = chart._s;
+  S.candles.setData(bars);
+  S.vol.setData(T.map((t, i) => ({ time: t, value: c.volume[i] || 0,
+    color: c.close[i] >= c.open[i] ? "rgba(22,163,74,.35)" : "rgba(220,38,38,.35)" })));
+  for (const n of [20, 50, 200]) S["s" + n].setData(T.map((t, i) => ({ time: t, value: smas[n][i] })).filter((x) => x.value != null));
+  chart._idx = new Map(T.map((t, i) => [t, i]));
+  chart._c = c; chart._smas = smas;
+
+  // Signal-Pfeile, wenn die Zeiteinheit zum Signal passt
+  const marks = data.signals.filter((s) => s.group === cv.group && s.symbol === cv.symbol && s.tf === cv.interval)
+    .map((s) => { const t = new Date(s.bar_time).getTime() / 1000; return { time: intraday ? localShift(t) : t, s }; })
+    .filter((m) => chart._idx.has(m.time))
+    .map(({ time, s }) => ({ time, position: s.direction === "long" ? "belowBar" : "aboveBar", color: s.direction === "long" ? "#16a34a" : "#dc2626",
+      shape: s.direction === "long" ? "arrowUp" : "arrowDown", text: s.title }));
+  S.candles.setMarkers(marks.sort((a, b) => a.time - b.time));
+
+  if (keepRange) chart.timeScale().setVisibleLogicalRange(keepRange);
+  else {
+    const last = T[T.length - 1], from = rangeStart(cv.range, c.time[c.time.length - 1]);
+    if (from == null) chart.timeScale().fitContent();
+    else chart.timeScale().setVisibleRange({ from: intraday ? localShift(from) : from, to: last });
+  }
+  legend(null);
+
+  clearInterval(cv.timer);
+  if (live.local || cv.group === "crypto") {  // laufende Kerze aktualisieren
+    cv.timer = setInterval(() => { if (!$("#modal").classList.contains("hidden")) drawChart(false); }, intraday ? 15000 : 60000);
+  }
+}
+
+function legend(i) {
+  const c = chart?._c;
+  if (!c) return;
+  if (i == null) i = c.time.length - 1;
+  const prev = i > 0 ? c.close[i - 1] : c.open[i];
+  const chg = c.close[i] / prev - 1;
+  const f = (x) => num(x);
+  const sm = (n, color) => `<span style="color:${color}">SMA ${n} ${chart._smas[n][i] != null ? f(chart._smas[n][i]) : "–"}</span>`;
+  $("#c-legend").innerHTML = `<b>${fmtBarTime(c.time[i], cv.interval)}</b>
+    <span>O <b>${f(c.open[i])}</b></span><span>H <b>${f(c.high[i])}</b></span><span>L <b>${f(c.low[i])}</b></span>
+    <span>C <b class="${cls(chg)}">${f(c.close[i])}</b></span><span class="${cls(chg)}">${pct1(chg)}</span>
+    <span>Vol <b>${compact(c.volume[i])}</b></span>${sm(20, "#a855f7")}${sm(50, "#f59e0b")}${sm(200, "#a16207")}
+    <span class="src">${esc(c.source || "")}</span>`;
+}
+
+const compact = (v) => v == null ? "–" : Intl.NumberFormat("de-DE", { notation: "compact", maximumFractionDigits: 2 }).format(v);
+
+function closeChart() { clearInterval(cv.timer); cv.req++; history.replaceState(null, "", location.pathname + location.search); $("#modal").classList.add("hidden"); if (chart) { chart.remove(); chart = null; } }
+
+$("#c-int").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-i]"); if (!b) return;
+  cv.interval = b.dataset.i;
+  drawChart(true);
+});
+$("#c-rng").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-r]"); if (!b) return;
+  cv.range = b.dataset.r; cv.interval = DEFAULT_INT[cv.range];
+  drawChart(true);
+});
 
 /* ---------------- Events ---------------- */
 
@@ -373,4 +542,6 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeChart
     binanceInBrowser();                    // GitHub Pages: Krypto live direkt von Binance
   }
   setInterval(checkForNewData, 30000);     // nach jeder Auswertung automatisch neu laden
+  const m = location.hash.match(/^#chart=([^|]+)\|([^|]+)\|(\w+)/);
+  if (m) openChart(m[1], decodeURIComponent(m[2]), m[3], null);
 })();

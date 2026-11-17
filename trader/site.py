@@ -51,7 +51,7 @@ def resolve(signals: list[dict], prepared: dict[str, pd.DataFrame], tf: str) -> 
 
 
 def write_chart(root: Path, group: str, symbol: str, tf: str, d: pd.DataFrame, signals: list[dict]) -> None:
-    tail = d.iloc[-CHART_BARS:]
+    tail = d.iloc[-(1300 if tf == "1d" else 400):]  # Tageskerzen ~5 Jahre (für die Chart-Ansicht ohne PC-Server)
     secs = (tail.index.asi8 // 10**9).tolist()
 
     def col(name):
@@ -66,7 +66,7 @@ def write_chart(root: Path, group: str, symbol: str, tf: str, d: pd.DataFrame, s
     _dump(_dir(root, group) / "charts" / chart_file(symbol, tf), {
         "symbol": symbol, "tf": tf, "time": secs,
         "open": col("open"), "high": col("high"), "low": col("low"), "close": col("close"),
-        "ema20": col("ema20"), "ema50": col("ema50"), "ema200": col("ema200"), "markers": markers,
+        "volume": [None if v != v else round(float(v)) for v in tail["volume"].tolist()], "markers": markers,
     })
 
 

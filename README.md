@@ -6,6 +6,9 @@ und schickt Alarme per **E-Mail**. Alle Signale, Charts und Trefferquoten stehen
 Läuft komplett kostenlos auf GitHub.
 
 ## So funktioniert es
+- **Chart-Ansicht (Klick auf ein Symbol):** Kerzen mit Volumen, SMA 20/50/200, O/H/L/C unter dem Mauszeiger,
+  Zeiteinheiten 1 Min bis Monatlich, Zeiträume 1 Tag bis Max – inkl. laufender Kerze (Krypto: Binance, Aktien: Yahoo).
+  Intraday-Charts für Aktien gibt es im Live-Modus auf dem PC; Krypto-Charts auch auf GitHub Pages.
 - **Website:** Marktübersicht aller überwachten Symbole (Trend, RSI, Squeeze, Abstand zu Hoch/Tief, aktive Setups,
   Wahrscheinlichkeit, Chart per Klick), dazu Signale, Verlauf und Statistik.
 - **Datenhaltung:** Kurs-/Chartdaten und der Zustand liegen im Zweig `data`, der bei jedem Lauf überschrieben wird –
