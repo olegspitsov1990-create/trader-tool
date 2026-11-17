@@ -193,7 +193,10 @@ async def main_async() -> None:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
+    (ROOT / "state").mkdir(exist_ok=True)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S",
+                        handlers=[logging.StreamHandler(),
+                                  logging.FileHandler(ROOT / "state" / "live.log", encoding="utf-8")])
     for noisy in ("yfinance", "urllib3", "websockets", "peewee"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
     load_env()
@@ -204,6 +207,8 @@ def main() -> None:
         asyncio.run(main_async())
     except KeyboardInterrupt:
         print("Beendet.")
+    except Exception:  # noqa: BLE001
+        log.exception("Programm wegen eines Fehlers beendet")
 
 
 if __name__ == "__main__":
