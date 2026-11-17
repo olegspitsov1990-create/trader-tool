@@ -41,7 +41,8 @@ Die Website läuft lokal unter **http://localhost:8080** – im Heimnetz auch au
 ### Dauerbetrieb
 - **Automatisch mit Windows starten:** `Win+R` → `shell:startup` → Verknüpfung zu `Trader-Tool starten.bat` hineinlegen.
 - **Ruhezustand verhindern:** Einstellungen → System → Netzbetrieb → „Bildschirm aus“ beliebig, aber **„Ruhezustand: Nie“**.
-- **Updates:** neue ZIP herunterladen und über den Ordner entpacken (`.env` und Daten bleiben erhalten).
+- **Updates:** Doppelklick auf **`Update.bat`**, danach das Trader-Tool-Fenster schließen und neu starten
+  (`.env`, Python-Umgebung und Daten bleiben erhalten).
 - Ist der PC aus, laufen keine Auswertungen. Beim nächsten Start wird die jeweils letzte Kerze nachgeholt.
 
 ## Betrieb über GitHub (Alternative ohne PC)
