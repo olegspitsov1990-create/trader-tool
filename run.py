@@ -44,10 +44,10 @@ def run(group: str, dry_run: bool = False, root: Path = ROOT,
     status: dict = {"group": group, "symbols": len(symbols), "timeframes": {}}
 
     for tf in gcfg["timeframes"]:
-        frames = provider(symbols, tf, market) if provider else data.download(symbols, tf, market)
+        frames = provider(symbols, tf, market) if provider else data.download(symbols, tf, market, gcfg.get("source"))
         prepared = {}
         for sym, df in frames.items():
-            df = data.closed_bars(df, tf, market, now)
+            df = data.closed_bars(df, tf, market, now, int(acfg.get("stock_close_buffer_minutes", 2)))
             if len(df) < stats.WARMUP + 50:
                 continue
             d = setups.detect(indicators.add_indicators(df, acfg), acfg)

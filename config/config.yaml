@@ -10,10 +10,11 @@ site_url: "https://olegspitsov1990-create.github.io/trader-tool/"
 groups:
   crypto:
     market: crypto
-    symbols: [BTC-USD, ETH-USD]
+    source: binance            # gleiche Kerzen wie BINANCE:BTCUSDT in TradingView
+    symbols: [BTCUSDT, ETHUSDT]
     names:
-      BTC-USD: Bitcoin
-      ETH-USD: Ethereum
+      BTCUSDT: Bitcoin
+      ETHUSDT: Ethereum
     timeframes: [1h, 4h, 1d]
 
   stocks:
@@ -27,6 +28,7 @@ analysis:
   squeeze_min_bars: 5        # Kerzen im Bollinger-Squeeze, bevor gewarnt wird
   horizon_bars: 10           # Zeitfenster für "Ausbruch" (in Kerzen)
   barrier_atr: 1.5           # Ausbruch = Kurs bewegt sich ±1,5 ATR
+  stock_close_buffer_minutes: 2   # Aktien-Tageskerze N Minuten nach US-Börsenschluss auswerten
 
 alerts:
   min_probability: 0.55      # Mindest-Richtungswahrscheinlichkeit für einen Alarm
@@ -34,3 +36,8 @@ alerts:
   min_samples: 30            # Mindestanzahl historischer Fälle des Setups
   cooldown_bars: 5           # gleiches Setup beim gleichen Symbol frühestens nach N Kerzen erneut
   max_signals_per_mail: 25   # weitere Signale stehen auf der Website
+
+# Live-Modus auf dem eigenen PC (live.py / "Trader-Tool starten.bat")
+live:
+  port: 8080                 # lokale Website: http://localhost:8080
+  stocks_poll_seconds: 60    # Aktien-Livekurse (Alpaca) alle N Sekunden

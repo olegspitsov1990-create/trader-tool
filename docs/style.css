@@ -78,3 +78,6 @@ th.sorted { color: var(--text); }
 .more { display: block; margin: 12px auto 0; padding: 8px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); cursor: pointer; }
 .modal-info { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
 .modal-info b { color: var(--text); }
+.livedot { color: var(--muted); font-weight: 600; margin-right: 6px; }
+.livedot.on { color: var(--up); animation: pulse 2s infinite; }
+@keyframes pulse { 50% { opacity: .45; } }

@@ -1,6 +1,6 @@
 # Trader Tool
 
-Überwacht **BTC, ETH (1h / 4h / 1D)** und **alle S&P-500-Aktien (1D)**, erkennt Kauf-/Verkaufs-Setups auf der
+Überwacht **BTCUSDT, ETHUSDT (1h / 4h / 1D, Binance)** und **alle S&P-500-Aktien (1D)**, erkennt Kauf-/Verkaufs-Setups auf der
 zuletzt abgeschlossenen Kerze, berechnet aus der Historie die **Wahrscheinlichkeit eines Ausbruchs nach oben bzw. unten**
 und schickt Alarme per **E-Mail**. Alle Signale, Charts und Trefferquoten stehen auf einer **Website** (GitHub Pages).
 Läuft komplett kostenlos auf GitHub.
@@ -19,7 +19,34 @@ Läuft komplett kostenlos auf GitHub.
 - **Live-Kontrolle:** Jedes verschickte Signal wird nach Ablauf automatisch bewertet („Verlauf“ und „Live-Treffer“ auf der Website).
 - Alle Schwellwerte stehen in `config/config.yaml`.
 
-## Einrichtung (ca. 15 Minuten)
+## Live-Modus auf dem PC (empfohlen)
+
+Kurse höchstens Sekunden hinter TradingView: Krypto kommt live von **Binance** (gleiche Kerzen wie `BINANCE:BTCUSDT`),
+jede 1h/4h/1D-Kerze wird Sekunden nach Schluss ausgewertet. Aktien-Livekurse kommen jede Minute über **Alpaca**
+(kostenloser Datenfeed IEX); die Tageskerze wird 2 Minuten nach US-Börsenschluss ausgewertet.
+Die Website läuft lokal unter **http://localhost:8080** – im Heimnetz auch auf dem Handy (Adresse steht im Fenster).
+
+### Einrichtung (einmalig, ca. 15 Minuten)
+1. **Python 3.12** von https://www.python.org/downloads/ installieren – beim Installieren **„Add python.exe to PATH“** anhaken.
+2. **Programm herunterladen:** auf GitHub **Code → Download ZIP**, entpacken, z. B. nach `C:\Trader-Tool`.
+3. **Alpaca-Konto (kostenlos):** https://alpaca.markets → registrieren → im Dashboard **API Keys → Generate**.
+   Key-ID und Secret notieren (das Secret wird nur einmal angezeigt).
+4. **Doppelklick auf `Trader-Tool starten.bat`.** Beim ersten Start öffnet sich die Datei `.env` im Editor:
+   E-Mail-Daten (wie bei GitHub) und die beiden Alpaca-Schlüssel eintragen, speichern, Editor schließen, Taste drücken.
+5. Das Fenster bleibt offen und zeigt, was passiert. Die Website öffnet sich automatisch.
+
+### Dauerbetrieb
+- **Automatisch mit Windows starten:** `Win+R` → `shell:startup` → Verknüpfung zu `Trader-Tool starten.bat` hineinlegen.
+- **Ruhezustand verhindern:** Einstellungen → System → Netzbetrieb → „Bildschirm aus“ beliebig, aber **„Ruhezustand: Nie“**.
+- **Updates:** neue ZIP herunterladen und über den Ordner entpacken (`.env` und Daten bleiben erhalten).
+- Ist der PC aus, laufen keine Auswertungen. Beim nächsten Start wird die jeweils letzte Kerze nachgeholt.
+
+## Betrieb über GitHub (Alternative ohne PC)
+Der Zeitplan auf GitHub ist abgeschaltet, damit keine doppelten E-Mails kommen. Manuelle Läufe und die Test-E-Mail
+gehen weiter über **Actions → Run workflow**. Zum Reaktivieren die `schedule`-Zeilen in
+`.github/workflows/monitor.yml` wieder einkommentieren (Verzögerung dann ca. 5–60 Minuten).
+
+## Einrichtung GitHub & Website (ca. 15 Minuten)
 
 ### 1. Repository anlegen
 1. Auf [github.com](https://github.com) anmelden → **New repository** → Name z. B. `trader-tool`.

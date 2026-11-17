@@ -4,6 +4,7 @@ const GROUPS = { crypto: "Krypto", stocks: "Aktien" };
 const data = { signals: [], stats: {}, status: {}, overview: {} };
 const ov = { q: "", sort: "edge", dir: -1, limit: 100 };
 let chart = null;
+const live = { on: false, local: false, data: { crypto: {}, stocks: {} }, ws: null };
 
 const $ = (s) => document.querySelector(s);
 const pct = (x) => (x == null ? "–" : Math.round(x * 100) + " %");
@@ -25,6 +26,7 @@ async function getJSON(url, fallback) {
 }
 
 async function load() {
+  data.signals = [];
   for (const g of Object.keys(GROUPS)) {
     const [sig, st, stat, o] = await Promise.all([
       getJSON(`data/${g}/signals.json`, []), getJSON(`data/${g}/stats.json`, {}),
@@ -36,11 +38,68 @@ async function load() {
     data.overview[g] = o;
   }
   data.signals.sort((a, b) => b.bar_time.localeCompare(a.bar_time));
-  $("#status").innerHTML = Object.entries(data.status).filter(([, s]) => s)
-    .map(([g, s]) => `${GROUPS[g]}: ${new Date(s.updated).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}`)
-    .join(" · ") || "Noch keine Daten";
+  renderStatus();
   setupOverviewControls();
   render();
+}
+
+function renderStatus() {
+  const fresh = live.on && live.data.updated && (Date.now() - new Date(live.data.updated)) < 180000;
+  const dot = live.on ? `<span class="livedot ${fresh ? "on" : ""}" title="${live.local ? "Live-Kurse vom PC (Binance + Alpaca)" : "Live-Kurse Krypto direkt von Binance"}">● Live</span> ` : "";
+  $("#status").innerHTML = dot + (Object.entries(data.status).filter(([, s]) => s)
+    .map(([g, s]) => `${GROUPS[g]}: ${new Date(s.updated).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}`)
+    .join(" · ") || "Noch keine Daten");
+}
+
+/* ---------------- Live-Kurse ---------------- */
+
+async function pollLive() {
+  try {
+    const r = await fetch("api/live?v=" + Date.now());
+    if (!r.ok) throw new Error();
+    live.data = await r.json();
+    live.on = live.local = true;
+  } catch {
+    if (live.local) { live.on = false; }
+    return false;
+  }
+  renderStatus();
+  if (!$("#tab-overview").classList.contains("hidden")) renderOverview();
+  return true;
+}
+
+function binanceInBrowser() {
+  // Auf GitHub Pages (ohne PC-Server): Krypto-Kurse direkt von Binance im Browser
+  const syms = Object.values(data.overview.crypto || {})[0]?.map((r) => r.symbol).filter((x) => x.endsWith("USDT")) || [];
+  if (!syms.length || live.ws) return;
+  const url = "wss://stream.binance.com:9443/stream?streams=" + syms.map((x) => x.toLowerCase() + "@miniTicker").join("/");
+  live.ws = new WebSocket(url);
+  live.ws.onmessage = (e) => {
+    const d = JSON.parse(e.data).data;
+    live.data.crypto[d.s] = { p: parseFloat(d.c), t: new Date(d.E).toISOString() };
+    live.data.updated = new Date().toISOString();
+    live.on = true;
+  };
+  live.ws.onclose = () => { live.ws = null; setTimeout(binanceInBrowser, 5000); };
+  if (live.timer) return;
+  live.timer = setInterval(() => { renderStatus(); if ($("#o-group").value === "crypto" && !$("#tab-overview").classList.contains("hidden")) renderOverview(); }, 3000);
+}
+
+async function checkForNewData() {
+  for (const g of Object.keys(GROUPS)) {
+    const st = await getJSON(`data/${g}/status.json`, null);
+    if (st && st.updated !== data.status[g]?.updated) { await load(); return; }
+  }
+}
+
+function liveRow(r, g) {
+  const src = live.data[g]?.[r.symbol];
+  if (!src || src.p == null || !r.close) return r;
+  const atr = r.atr_pct * r.close;
+  const hh = r.dist_hh != null ? r.close + r.dist_hh * atr : null;
+  const ll = r.dist_ll != null ? r.close - r.dist_ll * atr : null;
+  return { ...r, live: src.p, liveChg: src.p / r.close - 1,
+    dist_hh: hh != null ? (hh - src.p) / atr : null, dist_ll: ll != null ? (src.p - ll) / atr : null };
 }
 
 /* ---------------- Marktübersicht ---------------- */
@@ -59,7 +118,8 @@ function setupOverviewControls() {
 }
 
 function currentRows() {
-  return (data.overview[$("#o-group").value] || {})[$("#o-tf").value] || [];
+  const g = $("#o-group").value;
+  return ((data.overview[g] || {})[$("#o-tf").value] || []).map((r) => liveRow(r, g));
 }
 
 function quickFilter(r) {
@@ -76,7 +136,7 @@ function quickFilter(r) {
 }
 
 const SORT = {
-  symbol: (r) => r.symbol, close: (r) => r.close, chg: (r) => r.chg, chg20: (r) => r.chg20, trend: (r) => r.trend,
+  symbol: (r) => r.symbol, close: (r) => r.live ?? r.close, chg: (r) => r.liveChg ?? r.chg, chg20: (r) => r.chg20, trend: (r) => r.trend,
   rsi: (r) => r.rsi, squeeze_len: (r) => r.squeeze_len, dist_hh: (r) => r.dist_hh, dist_ll: (r) => r.dist_ll,
   vol_ratio: (r) => r.vol_ratio, setups: (r) => r.setups.length, edge: (r) => r.edge,
   prob: (r) => r.direction === "short" ? 1 - r.cond_up : r.cond_up,
@@ -89,13 +149,13 @@ function kpis(rows) {
   const above50 = rows.filter((r) => r.above_ema50).length;
   const sq = rows.filter((r) => r.squeeze_len > 0).length;
   const bo = (name) => rows.filter((r) => r.setups.some((s) => s.setup === name)).length;
-  const adv = rows.filter((r) => r.chg > 0).length;
+  const adv = rows.filter((r) => (r.liveChg ?? r.chg) > 0).length;
   const avgRsi = rows.reduce((a, r) => a + (r.rsi || 0), 0) / n;
   const k = (label, value, sub, c = "") => `<div class="kpi"><div class="kpi-l">${label}</div><div class="kpi-v ${c}">${value}</div><div class="kpi-s">${sub}</div></div>`;
   return [
     k("Über EMA 200", pct(up / n), `${up} von ${n} im Aufwärtstrend`, up / n >= 0.5 ? "pos" : "neg"),
     k("Über EMA 50", pct(above50 / n), "kurzfristige Stärke", above50 / n >= 0.5 ? "pos" : "neg"),
-    k("Steigend / fallend", `${adv} / ${n - adv}`, "letzte Kerze", adv >= n - adv ? "pos" : "neg"),
+    k("Steigend / fallend", `${adv} / ${n - adv}`, rows.some((r) => r.live != null) ? "laufende Kerze (live)" : "letzte Kerze", adv >= n - adv ? "pos" : "neg"),
     k("Ø RSI", dec(avgRsi, 0), avgRsi > 60 ? "eher überkauft" : avgRsi < 40 ? "eher überverkauft" : "neutral"),
     k("Im Squeeze", sq, "Ausbruch baut sich auf"),
     k("Ausbrüche ↑ / ↓", `${bo("AUSBRUCH_OBEN")} / ${bo("AUSBRUCH_UNTEN")}`, "letzte Kerze"),
@@ -121,15 +181,15 @@ function renderOverview() {
   const tf = $("#o-tf").value, g = $("#o-group").value;
   $("#o-table").innerHTML = `<div class="count">${rows.length} von ${all.length} Symbolen · Stand ${all[0] ? when(all[0].bar_time, tf) : ""}</div>
   <div class="table-wrap"><table class="ov"><thead><tr>
-    ${th("symbol", "Symbol", false)}${th("close", "Kurs")}${th("chg", "Kerze")}${th("chg20", "20 Kerzen")}${th("trend", "Trend", false)}
+    ${th("symbol", "Symbol", false)}${th("close", rows.some((r) => r.live != null) ? "Kurs (live)" : "Kurs")}${th("chg", rows.some((r) => r.live != null) ? "Kerze (live)" : "Kerze")}${th("chg20", "20 Kerzen")}${th("trend", "Trend", false)}
     ${th("rsi", "RSI")}${th("squeeze_len", "Squeeze", true, "Anzahl Kerzen im Bollinger-Squeeze")}
     ${th("dist_hh", "→ Hoch", true, "Abstand zum 20er-Hoch in ATR")}${th("dist_ll", "→ Tief", true, "Abstand zum 20er-Tief in ATR")}
     ${th("vol_ratio", "Volumen")}${th("setups", "Setups", false)}${th("prob", "Wahrsch.", true, "Historische Wahrscheinlichkeit in Setup-Richtung (ohne Setup: Basisrate ↑)")}${th("edge", "Vorteil")}
   </tr></thead><tbody>${shown.map((r) => `
     <tr class="row" data-chart="${g}|${esc(r.symbol)}|${tf}">
       <td><b>${esc(r.symbol)}</b><div class="sub">${esc(r.name)}</div></td>
-      <td class="num">${num(r.close)}</td>
-      <td class="num ${cls(r.chg)}">${pct1(r.chg)}</td>
+      <td class="num">${r.live != null ? `<b>${num(r.live)}</b>` : num(r.close)}</td>
+      <td class="num ${cls(r.liveChg ?? r.chg)}">${pct1(r.liveChg ?? r.chg)}</td>
       <td class="num ${cls(r.chg20)}">${pct1(r.chg20)}</td>
       <td class="${r.trend === "auf" ? "pos" : "neg"}">${r.trend === "auf" ? "↗ auf" : "↘ ab"}</td>
       <td class="num ${r.rsi > 70 ? "neg" : r.rsi < 30 ? "pos" : ""}">${dec(r.rsi, 0)}</td>
@@ -305,4 +365,12 @@ $("#modal-close").addEventListener("click", closeChart);
 $("#modal").addEventListener("click", (e) => { if (e.target.id === "modal") closeChart(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeChart(); });
 
-load();
+(async () => {
+  await load();
+  if (await pollLive()) {
+    setInterval(pollLive, 5000);          // lokaler PC-Server: Livekurse alle 5 s
+  } else {
+    binanceInBrowser();                    // GitHub Pages: Krypto live direkt von Binance
+  }
+  setInterval(checkForNewData, 30000);     // nach jeder Auswertung automatisch neu laden
+})();

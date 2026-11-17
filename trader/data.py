@@ -58,10 +58,53 @@ def _resample_4h(df: pd.DataFrame) -> pd.DataFrame:
     ).dropna(subset=["open", "close"])
 
 
-def download(symbols: list[str], timeframe: str, market: str, chunk: int = 100, retries: int = 3) -> dict[str, pd.DataFrame]:
+_stock_cache: dict = {}
+
+
+def download(symbols: list[str], timeframe: str, market: str, source: str | None = None) -> dict[str, pd.DataFrame]:
+    """Kursdaten laden. Krypto: Binance (Fallback Yahoo). Aktien: Yahoo, im Dauerbetrieb mit Cache
+    (nach dem ersten Abruf werden nur die letzten Tage nachgeladen – schnell beim Börsenschluss)."""
+    if source == "binance":
+        from . import binance
+        result = {}
+        for sym in symbols:
+            try:
+                result[sym] = binance.history(sym, timeframe)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Binance %s %s nicht erreichbar (%s) – Fallback Yahoo", sym, timeframe, exc)
+                y = sym[:-4] + "-USD" if sym.endswith("USDT") else sym
+                got = _yahoo([y], timeframe, market)
+                if y in got:
+                    result[sym] = got[y]
+        log.info("%s %s: %d/%d Symbole geladen (Binance)", market, timeframe, len(result), len(symbols))
+        return result
+
+    key = (market, timeframe)
+    cached = _stock_cache.get(key)
+    if cached and time.time() - cached["t"] < 3 * 86400 and timeframe == "1d":
+        fresh = _yahoo(symbols, timeframe, market, period="5d")
+        frames = {}
+        for sym in symbols:
+            old, new = cached["frames"].get(sym), fresh.get(sym)
+            if old is None:
+                if new is not None:
+                    frames[sym] = new
+                continue
+            frames[sym] = old if new is None else pd.concat([old, new])
+            frames[sym] = frames[sym][~frames[sym].index.duplicated(keep="last")].sort_index()
+        _stock_cache[key] = {"t": cached["t"], "frames": frames}
+        return {k: v.copy() for k, v in frames.items()}
+    frames = _yahoo(symbols, timeframe, market)
+    _stock_cache[key] = {"t": time.time(), "frames": frames}
+    return {k: v.copy() for k, v in frames.items()}
+
+
+def _yahoo(symbols: list[str], timeframe: str, market: str, period: str | None = None,
+           chunk: int = 100, retries: int = 3) -> dict[str, pd.DataFrame]:
     import yfinance as yf
 
-    period, interval = PERIODS[timeframe]
+    period, interval = (period or PERIODS[timeframe][0]), PERIODS[timeframe][1]
+    min_len = 1 if period == "5d" else 50
     result: dict[str, pd.DataFrame] = {}
     for i in range(0, len(symbols), chunk):
         part = symbols[i:i + chunk]
@@ -87,7 +130,7 @@ def download(symbols: list[str], timeframe: str, market: str, chunk: int = 100, 
                 df = _localize(_normalize(df.copy()), market)
                 if timeframe == "4h":
                     df = _resample_4h(df)
-                if len(df) > 50:
+                if len(df) >= min_len:
                     result[sym] = df
             except Exception as exc:  # noqa: BLE001
                 log.warning("%s: %s", sym, exc)
@@ -102,7 +145,7 @@ def download(symbols: list[str], timeframe: str, market: str, chunk: int = 100, 
                 df = _localize(_normalize(df.copy()), market)
                 if timeframe == "4h":
                     df = _resample_4h(df)
-                if len(df) > 50:
+                if len(df) >= min_len:
                     result[sym] = df
             except Exception as exc:  # noqa: BLE001
                 log.warning("%s (2. Versuch): %s", sym, exc)
@@ -120,12 +163,14 @@ def _localize(df: pd.DataFrame, market: str) -> pd.DataFrame:
     return df
 
 
-def closed_bars(df: pd.DataFrame, timeframe: str, market: str, now: datetime) -> pd.DataFrame:
-    """Nur vollständig abgeschlossene Kerzen behalten, Index in UTC."""
+def closed_bars(df: pd.DataFrame, timeframe: str, market: str, now: datetime,
+                stock_close_buffer_min: int = 2) -> pd.DataFrame:
+    """Nur vollständig abgeschlossene Kerzen behalten, Index in UTC.
+    Aktien-Tageskerze gilt N Minuten nach 16:00 New York als abgeschlossen (Schlussauktion)."""
     df = _localize(df.copy(), market)
     if market == "stocks" and timeframe == "1d":
         ny = df.index.tz_convert("America/New_York").normalize()
-        end = ny + pd.Timedelta(hours=16, minutes=15)
+        end = ny + pd.Timedelta(hours=16, minutes=stock_close_buffer_min)
     else:
         end = df.index + TF_DELTA[timeframe]
     df = df[end <= pd.Timestamp(now)]
