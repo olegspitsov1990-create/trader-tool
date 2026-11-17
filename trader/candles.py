@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 import pandas as pd
 import requests
 
+from .data import epoch_seconds
+
 INTERVAL_MS = {"1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000,
                "1d": 86_400_000, "1w": 604_800_000, "1M": 2_629_800_000}
 RANGE_DAYS = {"1D": 1, "5D": 5, "1M": 31, "3M": 92, "6M": 183, "1Y": 366, "2Y": 731, "5Y": 1827, "MAX": None}
@@ -112,7 +114,7 @@ def get(group: str, symbol: str, interval: str, rng: str) -> dict:
     out = {
         "symbol": symbol, "interval": interval, "range": rng,
         "source": "Binance" if group == "crypto" else "Yahoo Finance",
-        "time": (df.index.asi8 // 10**9).tolist(),
+        "time": epoch_seconds(df.index),
         **{c: [round(float(v), 6) for v in df[c].tolist()] for c in ("open", "high", "low", "close", "volume")},
     }
     with _lock:

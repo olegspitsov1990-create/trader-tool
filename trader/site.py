@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from .data import epoch_seconds
 from .setups import SETUPS, TITLES
 
 KEEP_SIGNALS = 1000
@@ -52,7 +53,7 @@ def resolve(signals: list[dict], prepared: dict[str, pd.DataFrame], tf: str) -> 
 
 def write_chart(root: Path, group: str, symbol: str, tf: str, d: pd.DataFrame, signals: list[dict]) -> None:
     tail = d.iloc[-(1300 if tf == "1d" else 400):]  # Tageskerzen ~5 Jahre (für die Chart-Ansicht ohne PC-Server)
-    secs = (tail.index.asi8 // 10**9).tolist()
+    secs = epoch_seconds(tail.index)
 
     def col(name):
         return [None if (v is None or (isinstance(v, float) and math.isnan(v))) else round(float(v), 6)

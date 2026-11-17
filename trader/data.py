@@ -20,6 +20,14 @@ MARKET_TZ = {"stocks": "America/New_York", "crypto": "UTC"}
 SP500_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 
 
+def epoch_seconds(idx) -> list[int]:
+    """Unix-Sekunden – unabhängig von der Zeitauflösung (pandas 2: ns, pandas 3: oft ms/s)."""
+    idx = pd.DatetimeIndex(idx)
+    if idx.tz is None:
+        idx = idx.tz_localize("UTC")
+    return ((idx - pd.Timestamp(0, tz="UTC")) // pd.Timedelta(seconds=1)).astype("int64").tolist()
+
+
 def load_sp500(cache_path: Path) -> pd.DataFrame:
     """S&P-500-Liste von Wikipedia; bei Fehler die zuletzt gespeicherte Liste."""
     try:
