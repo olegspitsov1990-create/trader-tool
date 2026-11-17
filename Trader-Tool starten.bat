@@ -16,7 +16,16 @@ if not exist .env (
   pause
 )
 
-where py >nul 2>nul && (set "PY=py -3") || (set "PY=python")
+set "PY="
+rem bewaehrte Python-Versionen bevorzugen (fuer sehr neue gibt es oft noch keine fertigen Pakete)
+for %%V in (3.12 3.13 3.11 3.14) do (
+  if not defined PY (
+    py -%%V --version >nul 2>nul && set "PY=py -%%V"
+  )
+)
+if not defined PY (
+  where py >nul 2>nul && (set "PY=py -3") || (set "PY=python")
+)
 %PY% --version >nul 2>nul
 if errorlevel 1 (
   echo.
@@ -39,6 +48,8 @@ echo Pruefe/installiere Pakete ...
 .venv\Scripts\python -m pip install -q --disable-pip-version-check -r requirements.txt
 if errorlevel 1 (
   echo FEHLER bei der Installation der Pakete - siehe Meldung oben.
+  echo Tipp: Python 3.12 von https://www.python.org/downloads/release/python-3120/ installieren,
+  echo den Ordner .venv loeschen und diese Datei erneut starten.
   goto :eof
 )
 
